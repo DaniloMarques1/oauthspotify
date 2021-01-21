@@ -10,6 +10,7 @@ import (
 
 	"github.com/joho/godotenv"
 )
+
 //var client_secret string
 
 type MakeCodeRequest struct {
@@ -27,11 +28,11 @@ type MakeTokenRequest struct {
 
 // populates the object with the given values
 func (mcr *MakeCodeRequest) New(url, scopes, redirect_uri, state, response_type string) {
-	mcr.Client_id     = os.Getenv("client_id")
-	mcr.Url           = url
-	mcr.Scopes        = scopes
-	mcr.Redirect_uri  = redirect_uri
-	mcr.State         = state
+	mcr.Client_id = os.Getenv("client_id")
+	mcr.Url = url
+	mcr.Scopes = scopes
+	mcr.Redirect_uri = redirect_uri
+	mcr.State = state
 	mcr.Response_type = response_type
 }
 
