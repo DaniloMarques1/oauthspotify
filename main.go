@@ -125,6 +125,9 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
+// checks if there is a token already, if not opens up a browser
+// to make the authorization code request to be exchanged for a
+// access token in the redirect endpoint
 func Index(w http.ResponseWriter, r *http.Request) {
 	tokenResponse, err := GetTokenFromFile(".token")
 	if err != nil {
@@ -132,12 +135,13 @@ func Index(w http.ResponseWriter, r *http.Request) {
 			"http://127.0.0.1:8080/redirect", "foobar", "code")
 		exec.Command("firefox", mcr.RequestUrl()).Start()
 	} else {
+		// TODO check if token has expired, if so create a function request a refresh token
 		MakingDataRequest(tokenResponse)
 	}
 }
 
-// after the user accept the usage of his data it will request the
-// authorization code to later exchange for a access token
+// after the user accept the usage of his data it will get the
+// authorization code and then exchange it for a access token
 func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 	authorization_code := r.FormValue("code")
@@ -154,7 +158,6 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Error performing request")
 	}
 	defer response.Body.Close()
-	fmt.Fprint(w, "Performed request")
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Fatal("Error reading body")
@@ -164,6 +167,7 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal("Error getting the token struct")
 	}
+	fmt.Fprintf(w, "Token obtained. Check your terminal.")
 	tokenResponse.SaveToken(".token")
 	MakingDataRequest(&tokenResponse)
 }
@@ -171,7 +175,6 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 // makes use of the access token to request the recently played tracks
 func MakingDataRequest(tokenResponse *TokenResponse) {
 	client := http.Client{}
-	fmt.Println(tokenResponse)
 	spotify_url := "https://api.spotify.com/v1/me/player/recently-played"
 	req, err := http.NewRequest(http.MethodGet, spotify_url, nil)
 	if err != nil {
