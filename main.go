@@ -89,6 +89,32 @@ func (mtr *MakeTokenRequest) Body() *strings.Reader {
 	return body_reader
 }
 
+func (tr *TokenResponse) SaveToken() {
+	b_token, err := json.Marshal(tr)
+	if err != nil {
+		log.Fatal("Error parsing json to save")
+	}
+	file, err := os.Create(".token")
+	if err != nil {
+		log.Fatal("Error creating token file")
+	}
+	_, err = file.WriteString(string(b_token))
+	if err != nil {
+		log.Fatal("Error saving token")
+	}
+}
+
+func GetTokenFromFile() (*TokenResponse, error) {
+	b, err := ioutil.ReadFile(".token")
+	if err != nil {
+		return nil, err
+	}
+	var tokenResponse TokenResponse
+	json.Unmarshal(b, &tokenResponse)
+
+	return &tokenResponse, nil
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("error reading enviroment variables")
@@ -100,12 +126,18 @@ func main() {
 }
 
 func Index(w http.ResponseWriter, r *http.Request) {
-	mcr := NewMakeCodeRequest("https://accounts.spotify.com/authorize", "user-read-recently-played",
-		"http://127.0.0.1:8080/redirect", "foobar", "code")
-	exec.Command("firefox", mcr.RequestUrl()).Start()
-	fmt.Fprintf(w, "Ola")
+	tokenResponse, err := GetTokenFromFile()
+	if err != nil {
+		mcr := NewMakeCodeRequest("https://accounts.spotify.com/authorize", "user-read-recently-played",
+			"http://127.0.0.1:8080/redirect", "foobar", "code")
+		exec.Command("firefox", mcr.RequestUrl()).Start()
+	} else {
+		MakingDataRequest(tokenResponse)
+	}
 }
 
+// after the user accept the usage of his data it will request the
+// authorization code to later exchange for a access token
 func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 	authorization_code := r.FormValue("code")
@@ -132,16 +164,22 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal("Error getting the token struct")
 	}
+	tokenResponse.SaveToken()
+	MakingDataRequest(&tokenResponse)
+}
 
+// makes use of the access token to request the recently played tracks
+func MakingDataRequest(tokenResponse *TokenResponse) {
+	client := http.Client{}
 	fmt.Println(tokenResponse)
 	spotify_url := "https://api.spotify.com/v1/me/player/recently-played"
-	req, err = http.NewRequest(http.MethodGet, spotify_url, nil)
+	req, err := http.NewRequest(http.MethodGet, spotify_url, nil)
 	if err != nil {
 		log.Fatalf("Error creating the request %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+tokenResponse.Access_token)
-	response, err = client.Do(req)
-	body, err = ioutil.ReadAll(response.Body)
+	response, err := client.Do(req)
+	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Fatal("Error reading body")
 	}
