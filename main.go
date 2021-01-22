@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -35,11 +36,11 @@ type MakeTokenRequest struct {
 }
 
 type TokenResponse struct {
-	access_token  string
-	token_type    string
-	scope         string
-	expires_in    int64
-	refresh_token string
+	Access_token  string `json:"access_token"`
+	Token_type    string `json:"token_type"`
+	Scope         string `json:"scope"`
+	Expires_in    int64  `json:"expires_in"`
+	Refresh_token string `json:"refresh_token"`
 }
 
 // returns a MakeCodeRequest object
@@ -110,15 +111,12 @@ func Index(w http.ResponseWriter, r *http.Request) {
 func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 	authorization_code := r.FormValue("code")
-	//fmt.Println(authorization_code)
-	fmt.Fprintf(w, "Opa\n")
 	makeTokenRequest := NewMakeTokenRequest("https://accounts.spotify.com/api/token", "authorization_code", authorization_code, "http://127.0.0.1:8080/redirect")
 	req, err := http.NewRequest(http.MethodPost, makeTokenRequest.Url, makeTokenRequest.Body())
 	if err != nil {
 		log.Fatalf("Error creating the request %v", err)
 	}
 	header := base64.RawURLEncoding.EncodeToString([]byte(makeTokenRequest.Client_id + ":" + makeTokenRequest.Client_secret))
-	fmt.Println(header)
 	req.Header.Set("Authorization", "Basic "+header)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := client.Do(req)
@@ -131,5 +129,11 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal("Error reading body")
 	}
-	fmt.Println(string(body))
+	var tokenResponse TokenResponse
+	err = json.Unmarshal(body, &tokenResponse)
+	if err != nil {
+		log.Fatal("Error getting the token struct")
+	}
+
+	fmt.Println(tokenResponse)
 }
