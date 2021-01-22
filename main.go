@@ -98,6 +98,7 @@ func (tr *TokenResponse) SaveToken(filename string) {
 	if err != nil {
 		log.Fatal("Error creating token file")
 	}
+	defer file.Close()
 	_, err = file.WriteString(string(b_token))
 	if err != nil {
 		log.Fatal("Error saving token")
@@ -135,7 +136,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 			"http://127.0.0.1:8080/redirect", "foobar", "code")
 		exec.Command("firefox", mcr.RequestUrl()).Start()
 	} else {
-		// TODO check if token has expired, if so create a function request a refresh token
+		// TODO check if token has expired, if so create a function to request a refresh token
 		MakingDataRequest(tokenResponse)
 	}
 }
@@ -187,4 +188,6 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 		log.Fatal("Error reading body")
 	}
 	fmt.Println(string(body))
+	//TODO: display the artists names of the musics (10 firsts)
+	// the name of the music and the date it was played
 }
