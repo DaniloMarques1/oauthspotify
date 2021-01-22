@@ -15,8 +15,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-//var client_secret string
-
 type MakeCodeRequest struct {
 	Url           string
 	Scopes        string
@@ -136,4 +134,16 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Println(tokenResponse)
+	spotify_url := "https://api.spotify.com/v1/me/player/recently-played"
+	req, err = http.NewRequest(http.MethodGet, spotify_url, nil)
+	if err != nil {
+		log.Fatalf("Error creating the request %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+tokenResponse.Access_token)
+	response, err = client.Do(req)
+	body, err = ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Fatal("Error reading body")
+	}
+	fmt.Println(string(body))
 }
