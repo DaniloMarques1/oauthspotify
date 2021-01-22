@@ -55,6 +55,42 @@ func Test_RequestTokenBody(t *testing.T) {
 	}
 }
 
+func Test_SaveToken(t *testing.T) {
+	tokenResponse := TokenResponse{
+		Access_token:  "Acess token",
+		Expires_in:    1,
+		Refresh_token: "Reresh token",
+		Scope:         "scope",
+		Token_type:    "type",
+	}
+	tokenResponse.SaveToken(".token_test")
+	_, err := os.Open(".token_test")
+	if err != nil {
+		t.Fatal("Error saving token")
+	}
+	os.Remove(".token_test") // removing test file
+}
+
+func Test_GetTokeFromTile(t *testing.T) {
+	tokenResponse := TokenResponse{
+		Access_token:  "Acess token",
+		Expires_in:    1,
+		Refresh_token: "Reresh token",
+		Scope:         "scope",
+		Token_type:    "type",
+	}
+	tokenResponse.SaveToken(".token_test")
+	returnedToken, err := GetTokenFromFile(".token_test")
+	if err != nil {
+		t.Fatal("Error recovering saved token")
+	}
+	if returnedToken.Access_token != tokenResponse.Access_token || returnedToken.Expires_in != tokenResponse.Expires_in ||
+		returnedToken.Refresh_token != tokenResponse.Refresh_token || returnedToken.Scope != tokenResponse.Scope ||
+		returnedToken.Token_type != tokenResponse.Token_type {
+		t.Fatal("Token returned does not match token saved")
+	}
+}
+
 func loadEnv(t *testing.T) {
 	if err := godotenv.Load(); err != nil {
 		t.Fatal("Error loading env vars")

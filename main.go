@@ -89,12 +89,12 @@ func (mtr *MakeTokenRequest) Body() *strings.Reader {
 	return body_reader
 }
 
-func (tr *TokenResponse) SaveToken() {
+func (tr *TokenResponse) SaveToken(filename string) {
 	b_token, err := json.Marshal(tr)
 	if err != nil {
 		log.Fatal("Error parsing json to save")
 	}
-	file, err := os.Create(".token")
+	file, err := os.Create(filename)
 	if err != nil {
 		log.Fatal("Error creating token file")
 	}
@@ -104,8 +104,8 @@ func (tr *TokenResponse) SaveToken() {
 	}
 }
 
-func GetTokenFromFile() (*TokenResponse, error) {
-	b, err := ioutil.ReadFile(".token")
+func GetTokenFromFile(filename string) (*TokenResponse, error) {
+	b, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func main() {
 }
 
 func Index(w http.ResponseWriter, r *http.Request) {
-	tokenResponse, err := GetTokenFromFile()
+	tokenResponse, err := GetTokenFromFile(".token")
 	if err != nil {
 		mcr := NewMakeCodeRequest("https://accounts.spotify.com/authorize", "user-read-recently-played",
 			"http://127.0.0.1:8080/redirect", "foobar", "code")
@@ -164,7 +164,7 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal("Error getting the token struct")
 	}
-	tokenResponse.SaveToken()
+	tokenResponse.SaveToken(".token")
 	MakingDataRequest(&tokenResponse)
 }
 
