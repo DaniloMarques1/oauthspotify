@@ -42,6 +42,35 @@ type TokenResponse struct {
 	Refresh_token string `json:"refresh_token"`
 }
 
+type MakeRefreshTokenRequest struct {
+	Grant_type    string  `json:"grant_type"`
+	Refresh_token string `json:"refresh_token"`
+	Client_id     string // header
+	Client_secret string // header
+}
+
+func NewMakeRefreshTokenRequest(grant_type, refresh_token string) *MakeRefreshTokenRequest {
+	client_id := os.Getenv("client_id")
+	client_secret := os.Getenv("client_secret")
+	refreshTokenRequest := MakeRefreshTokenRequest{
+		grant_type,
+		refresh_token,
+		client_id,
+		client_secret,
+	}
+	return &refreshTokenRequest
+}
+
+func (mrtr *MakeRefreshTokenRequest) Body() *strings.Reader {
+	body := url.Values{}
+	fmt.Println(mrtr.Refresh_token)
+	body.Add("grant_type", mrtr.Grant_type)
+	body.Add("refresh_token", mrtr.Refresh_token)
+	body_reader := strings.NewReader(body.Encode())
+
+	return body_reader
+}
+
 // recently played tracks response
 type Response struct {
 	Items []Item `json:"items"`
@@ -161,8 +190,14 @@ func Index(w http.ResponseWriter, r *http.Request) {
 			"http://127.0.0.1:8080/redirect", "foobar", "code")
 		exec.Command("firefox", mcr.RequestUrl()).Start()
 	} else {
-		// TODO check if token has expired, if so create a function to request a refresh token
-		MakingDataRequest(tokenResponse)
+		now := time.Now().Unix()
+		if now < tokenResponse.Expires_in {
+			// TODO need a new token
+			refreshTokenRequest := NewMakeRefreshTokenRequest("refresh_token", tokenResponse.Refresh_token)
+			RequestNewToken(refreshTokenRequest)
+		} else {
+			MakingDataRequest(tokenResponse)
+		}
 	}
 }
 
@@ -176,7 +211,7 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalf("Error creating the request %v", err)
 	}
-	header := base64.RawURLEncoding.EncodeToString([]byte(makeTokenRequest.Client_id + ":" + makeTokenRequest.Client_secret))
+	header := getAuthorizationHeader(makeTokenRequest.Client_id, makeTokenRequest.Client_secret)
 	req.Header.Set("Authorization", "Basic "+header)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := client.Do(req)
@@ -194,6 +229,8 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Error getting the token struct")
 	}
 	fmt.Fprintf(w, "Token obtained. Check your terminal.")
+	now := time.Now().Unix()
+	tokenResponse.Expires_in += now
 	tokenResponse.SaveToken(".token")
 	MakingDataRequest(&tokenResponse)
 }
@@ -212,8 +249,10 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 		log.Fatalf("Error making request %v", err)
 	}
 	if response.StatusCode != 200 {
-		//TODO: deal if access token expired
-		log.Fatalf("Error %v", response)
+		//TODO fix
+		fmt.Println("calling new token")
+		refreshTokenRequest := NewMakeRefreshTokenRequest("refresh_token", tokenResponse.Refresh_token)
+		RequestNewToken(refreshTokenRequest)
 	}
 	body, err := ioutil.ReadAll(response.Body)
 	var data Response
@@ -221,7 +260,6 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 	if err != nil {
 		log.Fatalf("error parsing json %v", err)
 	}
-	fmt.Println(data)
 	itens := data.Items
 	var size int
 	if len(itens) < 10 {
@@ -256,4 +294,37 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 		fmt.Println("==================")
 		fmt.Println()
 	}
+}
+
+// request a new token using the refresh token
+func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
+	client := http.Client{}
+	url_refresh_token := "https://accounts.spotify.com/api/token"
+	req, err := http.NewRequest(http.MethodPost, url_refresh_token, refreshNewToken.Body())
+	if err != nil {
+		log.Fatalf("Error creating request %v\n", err)
+	}
+	header := getAuthorizationHeader(refreshNewToken.Client_id, refreshNewToken.Client_secret)
+	req.Header.Set("Authorization", "Basic "+header)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, err := client.Do(req)
+	if err != nil || response.StatusCode != 200 {
+		log.Fatalf("error making request %v %v\n", response.StatusCode, err)
+	}
+	defer response.Body.Close()
+	b, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Fatalf("Error parsing response %v\n", err)
+	}
+	var tokenResponse TokenResponse
+	json.Unmarshal(b, &tokenResponse)
+	tokenResponse.Refresh_token = refreshNewToken.Refresh_token // TODO can i do this?
+	tokenResponse.SaveToken(".token")
+	MakingDataRequest(&tokenResponse)
+}
+
+// returns the base64 encoded client_id:client_secret
+func getAuthorizationHeader(client_id, client_secret string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(client_id + ":" + client_secret))
+	return header
 }

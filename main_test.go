@@ -89,6 +89,7 @@ func Test_GetTokeFromTile(t *testing.T) {
 		returnedToken.Token_type != tokenResponse.Token_type {
 		t.Fatal("Token returned does not match token saved")
 	}
+	os.Remove(".token_test") // removing test file
 }
 
 func loadEnv(t *testing.T) {
