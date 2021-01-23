@@ -1,10 +1,13 @@
 # OauthSpotify
 
-Simples app demostrating the usage of oauth2 to get some spotify data. First i needed to register my
+Simple app demostrating the usage of oauth2 to get some spotify data. First i needed to register my
 app on spotify developers account and also register my redirect uri.
 
 With the app registered i have access to my `client_id` and `cient_secret` to use to make the
-requests for the authorization code and access token.
+request for the authorization code and access token.
+
+With the access token i make a request to spotify api to get the user recently played tracks and
+display the last 10.
 
 [using oauth and
 spotify](https://developer.spotify.com/documentation/general/guides/authorization-guide/)

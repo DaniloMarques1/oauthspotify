@@ -286,6 +286,8 @@ func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
 	var tokenResponse TokenResponse
 	json.Unmarshal(b, &tokenResponse)
 	tokenResponse.Refresh_token = refreshNewToken.Refresh_token // TODO can i do this?
+	now := time.Now().Unix()
+	tokenResponse.Expires_in += now
 	tokenResponse.SaveToken(".token")
 	MakingDataRequest(&tokenResponse)
 }
