@@ -43,7 +43,7 @@ type TokenResponse struct {
 }
 
 type MakeRefreshTokenRequest struct {
-	Grant_type    string  `json:"grant_type"`
+	Grant_type    string `json:"grant_type"`
 	Refresh_token string `json:"refresh_token"`
 	Client_id     string // header
 	Client_secret string // header
@@ -63,7 +63,6 @@ func NewMakeRefreshTokenRequest(grant_type, refresh_token string) *MakeRefreshTo
 
 func (mrtr *MakeRefreshTokenRequest) Body() *strings.Reader {
 	body := url.Values{}
-	fmt.Println(mrtr.Refresh_token)
 	body.Add("grant_type", mrtr.Grant_type)
 	body.Add("refresh_token", mrtr.Refresh_token)
 	body_reader := strings.NewReader(body.Encode())
@@ -260,6 +259,46 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 	if err != nil {
 		log.Fatalf("error parsing json %v", err)
 	}
+
+	showTracks(data)
+}
+
+// request a new token using the refresh token
+func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
+	client := http.Client{}
+	url_refresh_token := "https://accounts.spotify.com/api/token"
+	req, err := http.NewRequest(http.MethodPost, url_refresh_token, refreshNewToken.Body())
+	if err != nil {
+		log.Fatalf("Error creating request %v\n", err)
+	}
+	header := getAuthorizationHeader(refreshNewToken.Client_id, refreshNewToken.Client_secret)
+	req.Header.Set("Authorization", "Basic "+header)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, err := client.Do(req)
+	if err != nil || response.StatusCode != 200 {
+		log.Fatalf("error making request %v %v\n", response.StatusCode, err)
+	}
+	defer response.Body.Close()
+	b, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Fatalf("Error parsing response %v\n", err)
+	}
+	var tokenResponse TokenResponse
+	json.Unmarshal(b, &tokenResponse)
+	tokenResponse.Refresh_token = refreshNewToken.Refresh_token // TODO can i do this?
+	tokenResponse.SaveToken(".token")
+	MakingDataRequest(&tokenResponse)
+}
+
+// returns the base64 encoded client_id:client_secret
+func getAuthorizationHeader(client_id, client_secret string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(client_id + ":" + client_secret))
+	return header
+}
+
+// loops over the response from spotify and shows
+// recently played tracks
+func showTracks(data Response) {
 	itens := data.Items
 	var size int
 	if len(itens) < 10 {
@@ -294,37 +333,4 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 		fmt.Println("==================")
 		fmt.Println()
 	}
-}
-
-// request a new token using the refresh token
-func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
-	client := http.Client{}
-	url_refresh_token := "https://accounts.spotify.com/api/token"
-	req, err := http.NewRequest(http.MethodPost, url_refresh_token, refreshNewToken.Body())
-	if err != nil {
-		log.Fatalf("Error creating request %v\n", err)
-	}
-	header := getAuthorizationHeader(refreshNewToken.Client_id, refreshNewToken.Client_secret)
-	req.Header.Set("Authorization", "Basic "+header)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response, err := client.Do(req)
-	if err != nil || response.StatusCode != 200 {
-		log.Fatalf("error making request %v %v\n", response.StatusCode, err)
-	}
-	defer response.Body.Close()
-	b, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Fatalf("Error parsing response %v\n", err)
-	}
-	var tokenResponse TokenResponse
-	json.Unmarshal(b, &tokenResponse)
-	tokenResponse.Refresh_token = refreshNewToken.Refresh_token // TODO can i do this?
-	tokenResponse.SaveToken(".token")
-	MakingDataRequest(&tokenResponse)
-}
-
-// returns the base64 encoded client_id:client_secret
-func getAuthorizationHeader(client_id, client_secret string) string {
-	header := base64.RawURLEncoding.EncodeToString([]byte(client_id + ":" + client_secret))
-	return header
 }
