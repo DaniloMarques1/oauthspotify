@@ -190,8 +190,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		exec.Command("firefox", mcr.RequestUrl()).Start()
 	} else {
 		now := time.Now().Unix()
-		if now < tokenResponse.Expires_in {
-			// TODO need a new token
+		if now > tokenResponse.Expires_in {
 			refreshTokenRequest := NewMakeRefreshTokenRequest("refresh_token", tokenResponse.Refresh_token)
 			RequestNewToken(refreshTokenRequest)
 		} else {
@@ -244,15 +243,10 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 	}
 	req.Header.Set("Authorization", "Bearer "+tokenResponse.Access_token)
 	response, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Error making request %v", err)
+	if err != nil || response.StatusCode != 200 {
+		log.Fatalf("Error making request %v %v", response.StatusCode, err)
 	}
-	if response.StatusCode != 200 {
-		//TODO fix
-		fmt.Println("calling new token")
-		refreshTokenRequest := NewMakeRefreshTokenRequest("refresh_token", tokenResponse.Refresh_token)
-		RequestNewToken(refreshTokenRequest)
-	}
+	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	var data Response
 	err = json.Unmarshal(body, &data)
@@ -285,7 +279,7 @@ func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
 	}
 	var tokenResponse TokenResponse
 	json.Unmarshal(b, &tokenResponse)
-	tokenResponse.Refresh_token = refreshNewToken.Refresh_token // TODO can i do this?
+	tokenResponse.Refresh_token = refreshNewToken.Refresh_token
 	now := time.Now().Unix()
 	tokenResponse.Expires_in += now
 	tokenResponse.SaveToken(".token")
