@@ -183,6 +183,10 @@ func main() {
 // to make the authorization code request to be exchanged for a
 // access token in the redirect endpoint
 func Index(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "" || r.Method != http.MethodGet {
+		http.Error(w, "Method not suported", http.StatusMethodNotAllowed)
+		return
+	}
 	tokenResponse, err := GetTokenFromFile(".token")
 	if err != nil {
 		mcr := NewMakeCodeRequest("https://accounts.spotify.com/authorize", "user-read-recently-played",
@@ -202,6 +206,10 @@ func Index(w http.ResponseWriter, r *http.Request) {
 // after the user accept the usage of his data it will get the
 // authorization code and then exchange it for a access token
 func RedirectUri(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "" || r.Method != http.MethodGet {
+		http.Error(w, "Method not suported", http.StatusMethodNotAllowed)
+		return
+	}
 	client := &http.Client{}
 	authorization_code := r.FormValue("code")
 	makeTokenRequest := NewMakeTokenRequest("https://accounts.spotify.com/api/token", "authorization_code", authorization_code, "http://127.0.0.1:8080/redirect")
