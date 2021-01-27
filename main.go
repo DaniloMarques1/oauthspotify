@@ -49,27 +49,6 @@ type MakeRefreshTokenRequest struct {
 	Client_secret string // header
 }
 
-func NewMakeRefreshTokenRequest(grant_type, refresh_token string) *MakeRefreshTokenRequest {
-	client_id := os.Getenv("client_id")
-	client_secret := os.Getenv("client_secret")
-	refreshTokenRequest := MakeRefreshTokenRequest{
-		grant_type,
-		refresh_token,
-		client_id,
-		client_secret,
-	}
-	return &refreshTokenRequest
-}
-
-func (mrtr *MakeRefreshTokenRequest) Body() *strings.Reader {
-	body := url.Values{}
-	body.Add("grant_type", mrtr.Grant_type)
-	body.Add("refresh_token", mrtr.Refresh_token)
-	body_reader := strings.NewReader(body.Encode())
-
-	return body_reader
-}
-
 // recently played tracks response
 type Response struct {
 	Items []Item `json:"items"`
@@ -109,13 +88,6 @@ func NewMakeCodeRequest(url, scopes, redirect_uri, state, response_type string) 
 	return makeCodeRequest
 }
 
-// return the url that will be used to make the request
-// for the authorization code
-func (mcr *MakeCodeRequest) RequestUrl() string {
-	return fmt.Sprintf("%v?response_type=code&client_id=%v&redirect_uri=%v&state=%v&scope=%v",
-		mcr.Url, mcr.Client_id, url.QueryEscape(mcr.Redirect_uri), mcr.State, url.QueryEscape(mcr.Scopes))
-}
-
 // returns a MakeTokenRequest object
 func NewMakeTokenRequest(url, grant_type, code, redirect_uri string) *MakeTokenRequest {
 	client_id := os.Getenv("client_id")
@@ -130,6 +102,35 @@ func NewMakeTokenRequest(url, grant_type, code, redirect_uri string) *MakeTokenR
 	}
 
 	return makeTokenRequest
+}
+
+func NewMakeRefreshTokenRequest(grant_type, refresh_token string) *MakeRefreshTokenRequest {
+	client_id := os.Getenv("client_id")
+	client_secret := os.Getenv("client_secret")
+	os.Setenv("jwt_secret", "ksldksldksd")
+	refreshTokenRequest := MakeRefreshTokenRequest{
+		grant_type,
+		refresh_token,
+		client_id,
+		client_secret,
+	}
+	return &refreshTokenRequest
+}
+
+func (mrtr *MakeRefreshTokenRequest) Body() *strings.Reader {
+	body := url.Values{}
+	body.Add("grant_type", mrtr.Grant_type)
+	body.Add("refresh_token", mrtr.Refresh_token)
+	body_reader := strings.NewReader(body.Encode())
+
+	return body_reader
+}
+
+// return the url that will be used to make the request
+// for the authorization code
+func (mcr *MakeCodeRequest) RequestUrl() string {
+	return fmt.Sprintf("%v?response_type=code&client_id=%v&redirect_uri=%v&state=%v&scope=%v",
+		mcr.Url, mcr.Client_id, url.QueryEscape(mcr.Redirect_uri), mcr.State, url.QueryEscape(mcr.Scopes))
 }
 
 func (mtr *MakeTokenRequest) Body() *strings.Reader {
@@ -183,7 +184,7 @@ func main() {
 // to make the authorization code request to be exchanged for a
 // access token in the redirect endpoint
 func Index(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "" || r.Method != http.MethodGet {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not suported", http.StatusMethodNotAllowed)
 		return
 	}
@@ -206,7 +207,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 // after the user accept the usage of his data it will get the
 // authorization code and then exchange it for a access token
 func RedirectUri(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "" || r.Method != http.MethodGet {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not suported", http.StatusMethodNotAllowed)
 		return
 	}
