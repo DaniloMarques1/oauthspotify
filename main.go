@@ -125,6 +125,8 @@ func main() {
 	http.HandleFunc("/", Index)
 	http.HandleFunc("/redirect", RedirectUri)
 
+	fmt.Println("Server running on port 8080")
+	fmt.Println("Open your browser on localhost:8080 to start the authorization flow")
 	http.ListenAndServe(":8080", nil)
 }
 
