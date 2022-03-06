@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,15 +15,6 @@ import (
 
 	"github.com/joho/godotenv"
 )
-
-type MakeCodeRequest struct {
-	Url           string
-	Scopes        string
-	Redirect_uri  string
-	State         string
-	Response_type string
-	Client_id     string
-}
 
 type MakeTokenRequest struct {
 	Url           string
@@ -49,45 +40,6 @@ type MakeRefreshTokenRequest struct {
 	Client_secret string // header
 }
 
-// recently played tracks response
-type Response struct {
-	Items []Item `json:"items"`
-}
-
-type Item struct {
-	Track     Track  `json:"track"`
-	Played_at string `json:"played_at"`
-}
-
-type Track struct {
-	Album Album  `json:"album"`
-	Name  string `json:"name"`
-}
-
-type Album struct {
-	Artists []Artist `json:"artists"`
-	Name    string   `json:"name"`
-}
-
-type Artist struct {
-	Name string `json:"name"`
-}
-
-// returns a MakeCodeRequest object
-func NewMakeCodeRequest(url, scopes, redirect_uri, state, response_type string) *MakeCodeRequest {
-	client_id := os.Getenv("client_id")
-	makeCodeRequest := &MakeCodeRequest{
-		url,
-		scopes,
-		redirect_uri,
-		state,
-		response_type,
-		client_id,
-	}
-
-	return makeCodeRequest
-}
-
 // returns a MakeTokenRequest object
 func NewMakeTokenRequest(url, grant_type, code, redirect_uri string) *MakeTokenRequest {
 	client_id := os.Getenv("client_id")
@@ -107,7 +59,7 @@ func NewMakeTokenRequest(url, grant_type, code, redirect_uri string) *MakeTokenR
 func NewMakeRefreshTokenRequest(grant_type, refresh_token string) *MakeRefreshTokenRequest {
 	client_id := os.Getenv("client_id")
 	client_secret := os.Getenv("client_secret")
-	os.Setenv("jwt_secret", "ksldksldksd")
+	//os.Setenv("jwt_secret", "ksldksldksd") // TODO what is this
 	refreshTokenRequest := MakeRefreshTokenRequest{
 		grant_type,
 		refresh_token,
@@ -118,19 +70,13 @@ func NewMakeRefreshTokenRequest(grant_type, refresh_token string) *MakeRefreshTo
 }
 
 func (mrtr *MakeRefreshTokenRequest) Body() *strings.Reader {
+	// query parameters
 	body := url.Values{}
 	body.Add("grant_type", mrtr.Grant_type)
 	body.Add("refresh_token", mrtr.Refresh_token)
 	body_reader := strings.NewReader(body.Encode())
 
 	return body_reader
-}
-
-// return the url that will be used to make the request
-// for the authorization code
-func (mcr *MakeCodeRequest) RequestUrl() string {
-	return fmt.Sprintf("%v?response_type=code&client_id=%v&redirect_uri=%v&state=%v&scope=%v",
-		mcr.Url, mcr.Client_id, url.QueryEscape(mcr.Redirect_uri), mcr.State, url.QueryEscape(mcr.Scopes))
 }
 
 func (mtr *MakeTokenRequest) Body() *strings.Reader {
@@ -159,13 +105,15 @@ func (tr *TokenResponse) SaveToken(filename string) {
 	}
 }
 
-func GetTokenFromFile(filename string) (*TokenResponse, error) {
-	b, err := ioutil.ReadFile(filename)
+func getTokenFromFile(filename string) (*TokenResponse, error) {
+	b, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
 	var tokenResponse TokenResponse
-	json.Unmarshal(b, &tokenResponse)
+	if err := json.Unmarshal(b, &tokenResponse); err != nil {
+		return nil, err
+	}
 
 	return &tokenResponse, nil
 }
@@ -188,20 +136,34 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not suported", http.StatusMethodNotAllowed)
 		return
 	}
-	tokenResponse, err := GetTokenFromFile(".token")
+	tokenResponse, err := getTokenFromFile(".token")
 	if err != nil {
-		mcr := NewMakeCodeRequest("https://accounts.spotify.com/authorize", "user-read-recently-played",
-			"http://127.0.0.1:8080/redirect", "foobar", "code")
-		exec.Command("firefox", mcr.RequestUrl()).Start()
+		// this will open the authorization server so you can provide your credentials in order to
+		// be able to access the resources you want.
+		// user-read-recently-played is the scope for this operation
+		// foobar is the state, it can be anything
+		// code is the response_type, which means we want the response_code
+		codeRequestUrl := buildGetCodeRequestUrl("https://accounts.spotify.com/authorize", "user-read-recently-played", "http://127.0.0.1:8080/redirect", "foobar", "code")
+		exec.Command("firefox", codeRequestUrl).Start()
 	} else {
 		now := time.Now().Unix()
-		if now > tokenResponse.Expires_in {
+		if isTokenExpired(now, tokenResponse.Expires_in) {
 			refreshTokenRequest := NewMakeRefreshTokenRequest("refresh_token", tokenResponse.Refresh_token)
-			RequestNewToken(refreshTokenRequest)
+			refreshToken(refreshTokenRequest)
 		} else {
-			MakingDataRequest(tokenResponse)
+			requestData(tokenResponse)
 		}
 	}
+}
+
+func buildGetCodeRequestUrl(baseUrl, scope, redirectUri, state, responseType string) string {
+	clientId := os.Getenv("client_id")
+	return fmt.Sprintf("%v?client_id=%v&redirect_uri=%v&response_type=%v&state=%v&scope=%v",
+		baseUrl, clientId, redirectUri, responseType, state, scope)
+}
+
+func isTokenExpired(nowMillis, tokenMillis int64) bool {
+	return nowMillis > tokenMillis
 }
 
 // after the user accept the usage of his data it will get the
@@ -226,7 +188,7 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Error performing request")
 	}
 	defer response.Body.Close()
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Fatal("Error reading body")
 	}
@@ -239,11 +201,11 @@ func RedirectUri(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	tokenResponse.Expires_in += now
 	tokenResponse.SaveToken(".token")
-	MakingDataRequest(&tokenResponse)
+	requestData(&tokenResponse)
 }
 
 // makes use of the access token to request the recently played tracks
-func MakingDataRequest(tokenResponse *TokenResponse) {
+func requestData(tokenResponse *TokenResponse) {
 	client := http.Client{}
 	spotify_url := "https://api.spotify.com/v1/me/player/recently-played"
 	req, err := http.NewRequest(http.MethodGet, spotify_url, nil)
@@ -256,21 +218,15 @@ func MakingDataRequest(tokenResponse *TokenResponse) {
 		log.Fatalf("Error making request %v %v", response.StatusCode, err)
 	}
 	defer response.Body.Close()
-	body, err := ioutil.ReadAll(response.Body)
-	var data Response
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		log.Fatalf("error parsing json %v", err)
-	}
-
-	showTracks(data)
+	bytes, err := io.ReadAll(response.Body)
+	showTracks(bytes)
 }
 
 // request a new token using the refresh token
-func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
+func refreshToken(refreshNewToken *MakeRefreshTokenRequest) {
 	client := http.Client{}
-	url_refresh_token := "https://accounts.spotify.com/api/token"
-	req, err := http.NewRequest(http.MethodPost, url_refresh_token, refreshNewToken.Body())
+	baseUrl := "https://accounts.spotify.com/api/token"
+	req, err := http.NewRequest(http.MethodPost, baseUrl, refreshNewToken.Body())
 	if err != nil {
 		log.Fatalf("Error creating request %v\n", err)
 	}
@@ -282,7 +238,7 @@ func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
 		log.Fatalf("error making request %v %v\n", response.StatusCode, err)
 	}
 	defer response.Body.Close()
-	b, err := ioutil.ReadAll(response.Body)
+	b, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Fatalf("Error parsing response %v\n", err)
 	}
@@ -292,50 +248,11 @@ func RequestNewToken(refreshNewToken *MakeRefreshTokenRequest) {
 	now := time.Now().Unix()
 	tokenResponse.Expires_in += now
 	tokenResponse.SaveToken(".token")
-	MakingDataRequest(&tokenResponse)
+	requestData(&tokenResponse)
 }
 
 // returns the base64 encoded client_id:client_secret
 func getAuthorizationHeader(client_id, client_secret string) string {
 	header := base64.RawURLEncoding.EncodeToString([]byte(client_id + ":" + client_secret))
 	return header
-}
-
-// loops over the response from spotify and shows
-// recently played tracks
-func showTracks(data Response) {
-	itens := data.Items
-	var size int
-	if len(itens) < 10 {
-		size = len(itens)
-	} else {
-		size = 10
-	}
-	for i := 0; i < size; i++ {
-		item := itens[i]
-		dt, err := time.Parse("2006-01-02T15:04:05.000Z", item.Played_at)
-		loc, err := time.LoadLocation("America/Recife")
-		if err != nil {
-			log.Fatalf("Error loading location %v", err)
-		}
-		fmt.Printf("Music name: %s\n", item.Track.Name)
-		fmt.Printf("Album name: %s\n", item.Track.Album.Name)
-		if err == nil {
-			dtStr := dt.In(loc).Format(time.UnixDate)
-			fmt.Printf("Played at: %v\n", dtStr)
-		}
-		fmt.Println("Artits (just the first 2):")
-		artits := item.Track.Album.Artists
-		var artistsSize int
-		if len(artits) < 2 {
-			artistsSize = len(artits)
-		} else {
-			artistsSize = 2
-		}
-		for j := 0; j < artistsSize; j++ {
-			fmt.Printf("   %d- %v\n", j+1, artits[j].Name)
-		}
-		fmt.Println("==================")
-		fmt.Println()
-	}
 }
